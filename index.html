@@ -1,0 +1,1443 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Microcosmos</title>
+<meta name="description" content="Un ecosistem viu în browser: plante, erbivore, prădători și descompunători care evoluează în timp real.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04060b; --panel:rgba(9,13,22,.82); --line:rgba(140,170,220,.14); --line2:rgba(140,170,220,.26);
+    --text:#d8e2f2; --muted:#7d8aa3; --dim:#56627a;
+    --plant:#5be38a; --herb:#4fd8ff; --pred:#ff4f8b; --dec:#ffbe50; --warn:#ffb547; --sick:#c8ff5a; --accent:#8fb4ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;-webkit-user-select:none;user-select:none}
+  canvas#world{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
+  canvas#world.grab{cursor:grab}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .hidden{display:none!important}
+  ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+
+  /* panou control */
+  #ctrl{top:14px;left:14px;width:304px;max-height:calc(100% - 28px);display:flex;flex-direction:column;overflow:hidden}
+  #ctrl .top{padding:14px 14px 10px}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;letter-spacing:.06em}
+  .sub{color:var(--muted);margin:2px 0 10px;line-height:1.5;font-size:11px}
+  .counts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .count{background:rgba(255,255,255,.035);border-radius:8px;padding:7px 4px;text-align:center}
+  .count b{display:block;font-size:15px;font-weight:600}
+  .count span{color:var(--muted);font-size:9px}
+  .c-plant{color:var(--plant)} .c-herb{color:var(--herb)} .c-pred{color:var(--pred)} .c-dec{color:var(--dec)}
+  .simrow{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:5px;margin-top:8px}
+  button{font:inherit;color:var(--text);background:rgba(255,255,255,.045);border:1px solid var(--line);
+    border-radius:8px;padding:7px 8px;cursor:pointer;transition:background .15s,border-color .15s}
+  button:hover{background:rgba(255,255,255,.1)}
+  button.on{border-color:currentColor;background:rgba(255,255,255,.1)}
+  .tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .tabs button{border:0;border-radius:0;background:none;color:var(--muted);padding:9px 0;font-size:11px}
+  .tabs button.on{color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+  .body{overflow-y:auto;padding:10px 14px 14px;flex:1}
+  .grp{margin-bottom:12px}
+  .lbl{color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-size:10px;margin:4px 0 7px}
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .tools button{text-align:left;display:flex;align-items:center;gap:6px;padding:7px}
+  .tools .ico{width:14px;text-align:center}
+  .tools .k{margin-left:auto;color:var(--dim);font-size:10px}
+  .tip{color:var(--muted);font-size:11px;line-height:1.5;margin-top:7px;min-height:32px}
+  .ctl{display:grid;grid-template-columns:96px 1fr 50px;align-items:center;gap:8px;margin:5px 0}
+  .ctl label{color:var(--muted);font-size:11px;line-height:1.2}
+  .ctl output{text-align:right;font-size:11px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:18px}
+  .chk{display:flex;align-items:center;gap:8px;color:var(--muted);margin:6px 0;cursor:pointer;font-size:11px}
+  .chk input{accent-color:var(--accent)}
+  select{font:inherit;color:var(--text);background:#0d1320;border:1px solid var(--line);border-radius:8px;padding:7px;width:100%}
+  .row2{display:grid;grid-template-columns:1fr auto;gap:5px}
+  .spec{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:9px}
+  .spec h3{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .spec p{color:var(--muted);font-size:10.5px;line-height:1.45;margin:3px 0 4px}
+  .spec .reset{float:right;font-size:10px;padding:3px 7px;margin-left:auto}
+  .legend{display:grid;grid-template-columns:18px 1fr;gap:6px 8px;color:var(--muted);font-size:11px;align-items:center}
+  .keys{color:var(--dim);font-size:10.5px;line-height:1.7;margin-top:6px}
+  .keys b{color:var(--muted);font-weight:400;background:rgba(255,255,255,.06);padding:0 4px;border-radius:3px}
+
+  /* statistici */
+  #stats{top:14px;right:14px;width:290px;max-height:calc(100% - 250px);overflow-y:auto;padding:12px 13px}
+  .season{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif;font-size:15px}
+  .season .ic{font-size:18px} .season .t{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+  .bar{height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin:6px 0 2px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+  .mini{color:var(--muted);font-size:10.5px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  td,th{padding:3px 2px;text-align:right} th{color:var(--muted);font-weight:400;font-size:10px}
+  td:first-child,th:first-child{text-align:left;color:var(--muted)}
+  #log{list-style:none} #log li{color:var(--muted);line-height:1.55;font-size:11px;padding:2px 0;border-bottom:1px dashed rgba(140,170,220,.07)}
+  #log li b{color:var(--text);font-weight:400}
+
+  /* grafic */
+  #graphBox{right:14px;bottom:14px;width:380px;padding:10px 12px}
+  .ghead{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+  .ghead .gt{padding:3px 8px;font-size:10px}
+  .chips{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  .chip{font-size:10px;padding:2px 6px;border-radius:10px;cursor:pointer;border:1px solid var(--line);opacity:.95}
+  .chip.off{opacity:.3}
+  #graph{width:100%;height:120px;display:block}
+
+  /* inspector */
+  #insp{left:332px;bottom:14px;width:290px;padding:12px 13px}
+  .ih{display:flex;align-items:center;gap:7px;font-family:'Space Grotesk',sans-serif;font-size:15px}
+  .ih button{margin-left:auto;padding:2px 8px}
+  .ist{color:var(--muted);margin:3px 0 8px;font-size:11px}
+  .igrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px;margin-bottom:8px}
+  .igrid span{color:var(--muted)}
+  .gene{display:grid;grid-template-columns:56px 1fr 40px;gap:8px;align-items:center;font-size:11px;margin:4px 0}
+  .gene span{color:var(--muted)}
+  .gbar{position:relative;height:6px;background:rgba(255,255,255,.07);border-radius:3px}
+  .gbar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+  .gbar u{position:absolute;top:-3px;width:2px;height:12px;background:#fff;opacity:.6}
+  .ibtn{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:9px}
+
+  #zoom{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:4px;align-items:center;padding:4px}
+  #zoom button{padding:4px 10px} #zoom span{min-width:46px;text-align:center;color:var(--muted)}
+  #banner{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;
+    opacity:0;transition:opacity .6s;font-family:'Space Grotesk',sans-serif}
+  #banner.show{opacity:1} #banner h2{font-size:36px;letter-spacing:.04em} #banner p{color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+  #mbar{display:none;position:fixed;top:10px;left:10px;right:10px;gap:6px;z-index:5}
+  #mbar button{background:var(--panel);backdrop-filter:blur(10px)}
+  #mbar .mc{margin-left:auto;display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 10px;font-size:11px}
+
+  @media (max-width:820px){
+    #mbar{display:flex}
+    #ctrl{top:52px;left:8px;right:8px;width:auto;max-height:62%}
+    #stats{top:52px;left:8px;right:8px;width:auto;max-height:55%}
+    #graphBox{left:8px;right:8px;bottom:8px;width:auto;padding:8px 10px}
+    #graph{height:64px}
+    #insp{left:8px;right:8px;bottom:118px;width:auto}
+    #zoom{bottom:118px;left:auto;right:8px;transform:none}
+    .mob-hide{display:none!important}
+  }
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+
+<div id="mbar">
+  <button id="mCtrl">☰ Control</button>
+  <button id="mStats">📊 Date</button>
+  <div class="mc"><span class="c-herb" id="mH">0</span><span class="c-pred" id="mR">0</span><span class="c-dec" id="mD">0</span></div>
+</div>
+
+<aside id="ctrl" class="panel">
+  <div class="top">
+    <h1>MICROCOSMOS</h1>
+    <p class="sub">Un ecosistem care trăiește singur. Plantele cresc, erbivorele pasc, prădătorii vânează, descompunătorii reciclează — și toți evoluează.</p>
+    <div class="counts">
+      <div class="count c-plant"><b id="cP">0</b><span>plante</span></div>
+      <div class="count c-herb"><b id="cH">0</b><span>erbivore</span></div>
+      <div class="count c-pred"><b id="cR">0</b><span>prădători</span></div>
+      <div class="count c-dec"><b id="cD">0</b><span>descomp.</span></div>
+    </div>
+    <div class="simrow">
+      <button id="pause">⏸ Pauză</button>
+      <button id="stepBtn" title="Un singur pas (tasta .)">⏭ Pas</button>
+      <button id="reset" title="Repornește scenariul (R)">↺</button>
+      <button id="shot" title="Salvează o captură">📷</button>
+    </div>
+    <div class="ctl" style="margin-top:8px"><label>Viteză timp</label><input id="speed" type="range" min="0" max="10" step="1" value="4"><output id="speedV">1×</output></div>
+  </div>
+  <nav class="tabs">
+    <button data-tab="tools" class="on">Unelte</button>
+    <button data-tab="world">Lume</button>
+    <button data-tab="species">Specii</button>
+    <button data-tab="view">Afișare</button>
+  </nav>
+  <div class="body">
+    <section data-sec="tools">
+      <div class="grp">
+        <div class="lbl">Unealtă</div>
+        <div class="tools" id="tools"></div>
+        <div class="tip" id="toolTip"></div>
+      </div>
+      <div class="grp">
+        <div class="ctl"><label>Mărime pensulă</label><input id="brush" type="range" min="10" max="220" value="45"><output id="brushV"></output></div>
+        <div class="ctl"><label>Cantitate / clic</label><input id="qty" type="range" min="1" max="30" value="5"><output id="qtyV"></output></div>
+      </div>
+      <div class="grp">
+        <div class="lbl">Scenariu</div>
+        <div class="row2">
+          <select id="scen">
+            <option value="echilibru">Echilibru</option>
+            <option value="invazie">Invazia prădătorilor</option>
+            <option value="paradis">Paradis vegetal</option>
+            <option value="oaze">Deșert cu oaze</option>
+            <option value="arhipelag">Arhipelag</option>
+            <option value="pustiu">Lume goală</option>
+          </select>
+          <button id="scenGo">Pornește</button>
+        </div>
+        <div class="tip" id="scenTip"></div>
+      </div>
+      <div class="keys">
+        <b>Spațiu</b> pauză · <b>.</b> pas · <b>+ −</b> viteză · <b>R</b> reset<br>
+        <b>0–9</b> unelte · <b>F</b> urmărește · <b>C</b> resetează camera · <b>H</b> ascunde tot<br>
+        Rotiță = zoom · clic dreapta / Shift + trage = mută camera
+      </div>
+    </section>
+    <section data-sec="world" class="hidden" id="secWorld"></section>
+    <section data-sec="species" class="hidden" id="secSpecies"></section>
+    <section data-sec="view" class="hidden" id="secView"></section>
+  </div>
+</aside>
+
+<aside id="stats" class="panel">
+  <div class="season"><span class="ic" id="sIc">✿</span><span id="sName">Primăvară</span><span class="t" id="sTime">00:00</span></div>
+  <div class="bar"><i id="sBar" style="width:0"></i></div>
+  <div class="mini" id="sFert">Fertilitate efectivă 100%</div>
+
+  <div class="lbl" style="margin-top:12px">Populație & evoluție</div>
+  <table>
+    <tr><th></th><th>nr.</th><th>viteză</th><th>văz</th><th>talie</th><th>gen.</th><th>vârstă</th></tr>
+    <tr class="c-herb"><td>erbivore</td><td id="tHn">–</td><td id="tHs">–</td><td id="tHv">–</td><td id="tHz">–</td><td id="tHg">–</td><td id="tHa">–</td></tr>
+    <tr class="c-pred"><td>prădători</td><td id="tRn">–</td><td id="tRs">–</td><td id="tRv">–</td><td id="tRz">–</td><td id="tRg">–</td><td id="tRa">–</td></tr>
+    <tr class="c-dec"><td>descomp.</td><td id="tDn">–</td><td id="tDs">–</td><td id="tDv">–</td><td id="tDz">–</td><td id="tDg">–</td><td id="tDa">–</td></tr>
+  </table>
+  <div class="mini" id="sCap" style="margin-top:4px"></div>
+
+  <div class="lbl" style="margin-top:12px">Nașteri și cauze de deces</div>
+  <table id="causes"></table>
+
+  <div class="lbl" style="margin-top:12px">Jurnal</div>
+  <ul id="log"></ul>
+</aside>
+
+<div id="graphBox" class="panel">
+  <div class="ghead">
+    <button class="gt on" data-g="pop">Populații</button>
+    <button class="gt" data-g="evo">Evoluție viteză</button>
+    <div class="chips" id="chips"></div>
+  </div>
+  <canvas id="graph"></canvas>
+</div>
+
+<div id="insp" class="panel hidden"></div>
+
+<div id="zoom" class="panel">
+  <button id="zOut">−</button><span id="zV">1.0×</span><button id="zIn">+</button><button id="zReset" title="Resetează camera (C)">⟲</button>
+</div>
+
+<div id="banner"><h2 id="bTitle"></h2><p id="bText"></p></div>
+<script id="sim">
+const Sim = (() => {
+  const TAU = Math.PI * 2, CELL = 48, SC = 24;
+  const TYPES = ['herb', 'pred', 'dec'];
+  const SPEC = {
+    herb: { name: 'Erbivor', genes: { speed:[1.3,.4,2.1], sense:[55,15,150], size:[4,2.5,7.5] },
+            startE: 30, repE: 52, maxE: 110, maxAge: 2400, base: .016, moveK: .014, senseK: .00028, sizeRef: 4, hardCap: 2500 },
+    pred: { name: 'Prădător', genes: { speed:[1.5,.5,3.6], sense:[80,20,200], size:[6,4,10] },
+            startE: 70, repE: 160, maxE: 220, maxAge: 3000, base: .022, moveK: .009, senseK: .0002, sizeRef: 6, hardCap: 900 },
+    dec:  { name: 'Descompunător', genes: { speed:[1.1,.4,2.4], sense:[70,20,180], size:[3,2,5] },
+            startE: 25, repE: 46, maxE: 90, maxAge: 2600, base: .012, moveK: .012, senseK: .0002, sizeRef: 3, hardCap: 1200 }
+  };
+  const DEFAULTS = {
+    fertility: 1, growth: 1, plantSpread: .72, mutation: .08,
+    seasons: true, seasonAmp: .3, seasonLen: 3600,
+    decay: 1, herding: true, predSprint: 1.3,
+    contagion: .5, diseaseLen: 700, diseaseDrain: .05, spontaneous: false,
+    herb: { meta: 1, gain: 1, rep: 1, life: 1, capK: 800 },
+    pred: { meta: 1, gain: 1, rep: 1, life: 1, capK: 20 },
+    dec:  { meta: 1, gain: 1, rep: 1, life: 1, capK: 120 }
+  };
+  const copy = o => JSON.parse(JSON.stringify(o));
+  const P = copy(DEFAULTS);
+  const S = { W: 800, H: 600, plants: [], herb: [], pred: [], dec: [], corpses: [],
+              tick: 0, nextId: 1, plantAcc: 0, onEvent: null,
+              maxGen: { herb: 1, pred: 1, dec: 1 }, stats: null,
+              soil: null, nutr: null, scols: 0, srows: 0 };
+  let cols = 1, rows = 1;
+  const G = {};
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  function gauss(){ let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); }
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const wrap = (v, m) => ((v % m) + m) % m;
+  const emit = (t, a, b, c) => S.onEvent && S.onEvent(t, a, b, c);
+  function tdist(ax, ay, bx, by){
+    let dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
+    dx = Math.min(dx, S.W - dx); dy = Math.min(dy, S.H - dy);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // ---------- sol & nutrienți ----------
+  const si = (x, y) => Math.min(S.srows - 1, (y / SC) | 0) * S.scols + Math.min(S.scols - 1, (x / SC) | 0);
+  const fertAt = (x, y) => { const i = si(x, y); return S.soil[i] * (.6 + S.nutr[i]); };
+  function fertilize(x, y, v){ const i = si(x, y); S.nutr[i] = Math.min(2, S.nutr[i] + v); }
+  function forCells(x, y, r, fn){
+    const cr = Math.ceil(r / SC), cx = (x / SC) | 0, cy = (y / SC) | 0;
+    for (let j = -cr; j <= cr; j++) for (let i = -cr; i <= cr; i++){
+      const gx = wrap(cx + i, S.scols), gy = wrap(cy + j, S.srows);
+      const d = tdist(x, y, (gx + .5) * SC, (gy + .5) * SC);
+      if (d < r) fn(gy * S.scols + gx, 1 - d / r);
+    }
+  }
+  function seasonMod(){ return P.seasons ? Math.max(.05, 1 + P.seasonAmp * Math.sin(TAU * S.tick / P.seasonLen)) : 1; }
+  function seasonInfo(){
+    if (!P.seasons) return { name: 'Fără anotimpuri', phase: 0, icon: '◎' };
+    const ph = (S.tick % P.seasonLen) / P.seasonLen;
+    const q = ((ph + .125) % 1) * 4 | 0;
+    return { phase: ph, name: ['Primăvară','Vară','Toamnă','Iarnă'][q], icon: ['✿','☀','❦','❄'][q], idx: q };
+  }
+
+  // ---------- entități ----------
+  function makeGenes(type, parent){
+    const g = {}, def = SPEC[type].genes;
+    for (const k in def){
+      const [base, lo, hi] = def[k];
+      g[k] = parent ? clamp(parent.g[k] * (1 + gauss() * P.mutation), lo, hi)
+                    : clamp(base * (1 + gauss() * .05), lo, hi);
+    }
+    return g;
+  }
+  function creature(type, x, y, parent){
+    x = wrap(x, S.W); y = wrap(y, S.H);
+    return { id: S.nextId++, type, x, y, px: x, py: y, a: rand(0, TAU), v: 0,
+             e: SPEC[type].startE, age: 0, g: makeGenes(type, parent),
+             gen: parent ? parent.gen + 1 : 1, parentId: parent ? parent.id : 0,
+             kids: 0, kills: 0, eaten: 0, sick: 0,
+             immune: parent ? (parent.immune && Math.random() < .5) : false,
+             state: 'se naște', tgt: null, born: S.tick, dead: false, cause: '' };
+  }
+  function plant(x, y){ return { x: wrap(x, S.W), y: wrap(y, S.H), e: rand(2, 5), rot: rand(0, TAU), dead: false }; }
+
+  function resize(W, H){
+    const oc = S.scols, orw = S.srows, os = S.soil, on = S.nutr;
+    S.W = W; S.H = H;
+    cols = Math.max(1, Math.ceil(W / CELL)); rows = Math.max(1, Math.ceil(H / CELL));
+    for (const k of ['plant','herb','pred','dec','corpse']) G[k] = Array.from({ length: cols * rows }, () => []);
+    S.scols = Math.max(1, Math.ceil(W / SC)); S.srows = Math.max(1, Math.ceil(H / SC));
+    S.soil = new Float32Array(S.scols * S.srows).fill(1);
+    S.nutr = new Float32Array(S.scols * S.srows).fill(.4);
+    if (os) for (let y = 0; y < Math.min(orw, S.srows); y++) for (let x = 0; x < Math.min(oc, S.scols); x++){
+      S.soil[y * S.scols + x] = os[y * oc + x]; S.nutr[y * S.scols + x] = on[y * oc + x];
+    }
+    for (const arr of [S.plants, S.herb, S.pred, S.dec, S.corpses]) for (const o of arr){
+      o.x = wrap(o.x, W); o.y = wrap(o.y, H); o.px = o.x; o.py = o.y;
+    }
+  }
+  function fill(grid, list){
+    for (let i = 0; i < grid.length; i++) grid[i].length = 0;
+    for (const o of list){
+      const cx = Math.min(cols - 1, (o.x / CELL) | 0), cy = Math.min(rows - 1, (o.y / CELL) | 0);
+      grid[cy * cols + cx].push(o);
+    }
+  }
+  function nearest(grid, x, y, r){
+    const cr = Math.ceil(r / CELL), cx = (x / CELL) | 0, cy = (y / CELL) | 0;
+    let best = null, bd = r * r, bdx = 0, bdy = 0;
+    const hw = S.W / 2, hh = S.H / 2;
+    for (let j = -cr; j <= cr; j++){
+      const yy = wrap(cy + j, rows);
+      for (let i = -cr; i <= cr; i++){
+        const cell = grid[yy * cols + wrap(cx + i, cols)];
+        for (let k = 0; k < cell.length; k++){
+          const o = cell[k]; if (o.dead) continue;
+          let dx = o.x - x, dy = o.y - y;
+          if (dx > hw) dx -= S.W; else if (dx < -hw) dx += S.W;
+          if (dy > hh) dy -= S.H; else if (dy < -hh) dy += S.H;
+          const d = dx * dx + dy * dy;
+          if (d < bd){ bd = d; best = o; bdx = dx; bdy = dy; }
+        }
+      }
+    }
+    return best ? { o: best, dx: bdx, dy: bdy, d: Math.sqrt(bd) } : null;
+  }
+  function near(grid, x, y, r, fn){
+    const cr = Math.ceil(r / CELL), cx = (x / CELL) | 0, cy = (y / CELL) | 0, r2 = r * r;
+    const hw = S.W / 2, hh = S.H / 2;
+    for (let j = -cr; j <= cr; j++){
+      const yy = wrap(cy + j, rows);
+      for (let i = -cr; i <= cr; i++){
+        const cell = grid[yy * cols + wrap(cx + i, cols)];
+        for (let k = 0; k < cell.length; k++){
+          const o = cell[k]; if (o.dead) continue;
+          let dx = o.x - x, dy = o.y - y;
+          if (dx > hw) dx -= S.W; else if (dx < -hw) dx += S.W;
+          if (dy > hh) dy -= S.H; else if (dy < -hh) dy += S.H;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < r2) fn(o, dx, dy, d2);
+        }
+      }
+    }
+  }
+  function steer(c, ang, turn){
+    let d = ang - c.a; d = Math.atan2(Math.sin(d), Math.cos(d));
+    c.a += clamp(d, -turn, turn);
+  }
+  function die(c, cause, corpseE){
+    if (c.dead) return;
+    c.dead = true; c.cause = cause; c.deathTick = S.tick;
+    S.stats.deaths[c.type][cause] = (S.stats.deaths[c.type][cause] || 0) + 1;
+    if (corpseE === undefined) corpseE = 8 + c.g.size * 2 + Math.max(0, c.e) * .3;
+    if (corpseE > 0 && S.corpses.length < 3000) S.corpses.push({ x: c.x, y: c.y, e: corpseE, e0: corpseE, dead: false });
+  }
+
+  // ---------- comportamente ----------
+  function herd(c){
+    let n = 0, cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0;
+    near(G.herb, c.x, c.y, 42, (o, dx, dy, d2) => {
+      if (o === c) return;
+      n++; cx += dx; cy += dy; ax += Math.cos(o.a); ay += Math.sin(o.a);
+      if (d2 < 110){ sx -= dx; sy -= dy; }
+    });
+    if (!n) return false;
+    steer(c, Math.atan2(cy / n * .03 + ay / n + sy * .09, cx / n * .03 + ax / n + sx * .09), .1);
+    c.a += gauss() * .05;
+    return true;
+  }
+  function seekFertile(c){   // fără țintă: se îndreaptă spre sol mai fertil, unde e viață
+    if (S.tick % 6 !== c.id % 6) return;
+    const L = 40, f0 = fertAt(c.x, c.y);
+    let best = c.a, bf = f0;
+    for (const da of [-1.1, 0, 1.1]){
+      const ang = c.a + da, f = fertAt(wrap(c.x + Math.cos(ang) * L, S.W), wrap(c.y + Math.sin(ang) * L, S.H));
+      if (f > bf + .05){ bf = f; best = ang; }
+    }
+    if (bf > f0 + .05 || f0 < .4) steer(c, best, f0 < .4 ? .6 : .25);
+  }
+  function updateHerb(c){
+    const sp = SPEC.herb, pp = P.herb, g = c.g;
+    const threat = nearest(G.pred, c.x, c.y, g.sense);
+    let mode = .55; c.tgt = null;
+    if (threat){ steer(c, Math.atan2(-threat.dy, -threat.dx), .35); mode = 1; c.state = 'fuge'; c.tgt = threat.o; }
+    else {
+      const food = nearest(G.plant, c.x, c.y, g.sense);
+      if (food){
+        steer(c, Math.atan2(food.dy, food.dx), .3); mode = .9; c.state = 'caută hrană'; c.tgt = food.o;
+        if (food.d < g.size + 2 + food.o.e * .18){
+          c.e = Math.min(sp.maxE, c.e + food.o.e * pp.gain); food.o.dead = true; c.eaten++; c.state = 'pășunează';
+        }
+      } else if (P.herding && herd(c)){ mode = .6; c.state = 'în turmă'; }
+      else { c.a += gauss() * .18; c.state = 'rătăcește'; }
+      if (!food) seekFertile(c);
+    }
+    c.v = g.speed * mode;
+    c.e -= (sp.base + sp.moveK * c.v * c.v * (g.size / sp.sizeRef) + sp.senseK * g.sense) * pp.meta;
+  }
+  function updatePred(c){
+    const sp = SPEC.pred, pp = P.pred, g = c.g;
+    let mode = .5; c.tgt = null;
+    const prey = c.e < sp.maxE * .85 ? nearest(G.herb, c.x, c.y, g.sense) : null;
+    if (prey){
+      steer(c, Math.atan2(prey.dy, prey.dx), .32); mode = P.predSprint; c.state = 'vânează'; c.tgt = prey.o;
+      if (prey.d < g.size + prey.o.g.size){
+        const v = prey.o;
+        die(v, 'vanat', 5 + v.g.size * 1.5);
+        c.e = Math.min(sp.maxE, c.e + (26 + v.e * .35) * pp.gain); c.kills++;
+        emit('kill', v.x, v.y);
+      }
+    } else { c.a += gauss() * .12; c.state = c.e >= sp.maxE * .85 ? 'sătul' : 'patrulează'; seekFertile(c); }
+    c.v = g.speed * mode;
+    c.e -= (sp.base + sp.moveK * c.v * c.v * (g.size / sp.sizeRef) + sp.senseK * g.sense) * pp.meta;
+  }
+  function updateDec(c){
+    const sp = SPEC.dec, pp = P.dec, g = c.g;
+    let mode = .5; c.tgt = null;
+    const food = nearest(G.corpse, c.x, c.y, g.sense);
+    if (food){
+      steer(c, Math.atan2(food.dy, food.dx), .3); mode = .9; c.state = 'caută hoituri'; c.tgt = food.o;
+      if (food.d < g.size + 3){
+        c.e = Math.min(sp.maxE, c.e + food.o.e * .8 * pp.gain);
+        fertilize(food.o.x, food.o.y, food.o.e * .03);
+        food.o.dead = true; c.eaten++; c.state = 'descompune';
+      }
+    } else { c.a += gauss() * .2; c.state = 'rătăcește'; }
+    c.v = g.speed * mode;
+    c.e -= (sp.base + sp.moveK * c.v * c.v * (g.size / sp.sizeRef) + sp.senseK * g.sense) * pp.meta;
+  }
+  const UPD = { herb: updateHerb, pred: updatePred, dec: updateDec };
+
+  function capOf(type){ return Math.min(SPEC[type].hardCap, Math.max(4, Math.round(S.W * S.H / 1e6 * P[type].capK))); }
+  function reproduce(list, c){
+    const sp = SPEC[c.type];
+    const cap = capOf(c.type), n = list.length;
+    if (c.e > sp.repE * P[c.type].rep && n < cap && Math.random() < 1 - Math.pow(n / cap, 4)){
+      c.e *= .46;
+      const ch = creature(c.type, c.x + rand(-6, 6), c.y + rand(-6, 6), c);
+      ch.e = c.e; ch.a = c.a + rand(-1, 1);
+      list.push(ch); c.kids++;
+      S.stats.births[c.type]++;
+      if (ch.gen > S.maxGen[c.type]) S.maxGen[c.type] = ch.gen;
+      emit('birth', c.x, c.y, c.type);
+    }
+  }
+  function compact(list){
+    let j = 0;
+    for (let i = 0; i < list.length; i++) if (!list[i].dead) list[j++] = list[i];
+    list.length = j;
+  }
+
+  function step(){
+    S.tick++;
+    const area = S.W * S.H, sm = seasonMod();
+
+    // plante
+    const eff = P.fertility * sm;
+    const plantCap = area / 950 * Math.sqrt(eff);
+    S.plantAcc += eff * area / 1e6 * 3.2;
+    while (S.plantAcc >= 1){
+      S.plantAcc--;
+      if (S.plants.length >= plantCap) continue;
+      let x, y;
+      if (S.plants.length && Math.random() < P.plantSpread){
+        const p = S.plants[(Math.random() * S.plants.length) | 0];
+        x = wrap(p.x + gauss() * 22, S.W); y = wrap(p.y + gauss() * 22, S.H);
+      } else { x = rand(0, S.W); y = rand(0, S.H); }
+      if (Math.random() < fertAt(x, y)) S.plants.push(plant(x, y));
+    }
+    const gr = .012 * P.growth * sm;
+    for (const p of S.plants) if (p.e < 13) p.e += gr * fertAt(p.x, p.y);
+
+    fill(G.plant, S.plants); fill(G.herb, S.herb); fill(G.pred, S.pred); fill(G.dec, S.dec); fill(G.corpse, S.corpses);
+
+    for (const t of TYPES){ const f = UPD[t]; for (const c of S[t]) if (!c.dead) f(c); }
+
+    // boli
+    if (P.spontaneous && Math.random() < .00025){
+      const t = Math.random() < .7 ? 'herb' : 'pred', L = S[t];
+      if (L.length){ const c = L[(Math.random() * L.length) | 0]; if (!c.immune && !c.dead){ c.sick = P.diseaseLen; emit('outbreak', c.x, c.y, t); } }
+    }
+    for (const t of TYPES) for (const c of S[t]){
+      if (c.sick <= 0 || c.dead) continue;
+      c.sick--; c.e -= P.diseaseDrain;
+      if (c.sick <= 0){ c.immune = true; continue; }
+      near(G[t], c.x, c.y, c.g.size * 2 + 8, o => {
+        if (o !== c && !o.sick && !o.immune && Math.random() < P.contagion * .04) o.sick = P.diseaseLen;
+      });
+    }
+
+    // mișcare, îmbătrânire, moarte, reproducere
+    for (const t of TYPES){
+      const list = S[t], len = list.length, maxAge = SPEC[t].maxAge * P[t].life;
+      for (let i = 0; i < len; i++){
+        const c = list[i]; if (c.dead) continue;
+        c.px = c.x; c.py = c.y;
+        c.x = wrap(c.x + Math.cos(c.a) * c.v, S.W);
+        c.y = wrap(c.y + Math.sin(c.a) * c.v, S.H);
+        c.age++;
+        if (c.e <= 0) die(c, c.sick > 0 ? 'boala' : 'foame');
+        else if (c.age > maxAge) die(c, 'batranete');
+        else reproduce(list, c);
+      }
+    }
+
+    // hoituri și nutrienți
+    for (const c of S.corpses){
+      if (c.dead) continue;
+      const d = Math.min(c.e, .02 * P.decay);
+      c.e -= d; fertilize(c.x, c.y, d * .04);
+      if (c.e <= .01) c.dead = true;
+    }
+    if (S.tick % 4 === 0){ const n = S.nutr; for (let i = 0; i < n.length; i++) n[i] += (.4 - n[i]) * .0016; }
+
+    compact(S.plants); compact(S.herb); compact(S.pred); compact(S.dec); compact(S.corpses);
+  }
+
+  // ---------- scenarii ----------
+  function randFertile(){
+    let x = 0, y = 0;
+    for (let t = 0; t < 40; t++){ x = rand(0, S.W); y = rand(0, S.H); if (Math.random() * 2.2 < fertAt(x, y)) break; }
+    return [x, y];
+  }
+  function seed(name){
+    for (const k of ['plants','herb','pred','dec','corpses']) S[k].length = 0;
+    S.tick = 0; S.nextId = 1; S.plantAcc = 0; S.maxGen = { herb: 1, pred: 1, dec: 1 };
+    S.stats = { births: { herb: 0, pred: 0, dec: 0 }, deaths: { herb: {}, pred: {}, dec: {} } };
+    S.soil.fill(1); S.nutr.fill(.4);
+    const k = S.W * S.H / 1e6;
+    const zone = (n, rmin, rmax, val, base) => {
+      S.soil.fill(base);
+      for (let i = 0; i < n; i++){
+        const x = rand(0, S.W), y = rand(0, S.H), r = rand(rmin, rmax) * Math.sqrt(Math.max(.4, k));
+        forCells(x, y, r, (ci, t) => { S.soil[ci] = Math.max(S.soil[ci], base + (val - base) * Math.min(1, t * 1.8)); });
+      }
+    };
+    let pl = 550, h = 70, p = 6, d = 12;
+    switch (name){
+      case 'invazie': p = 30; break;
+      case 'paradis': S.soil.fill(1.5); pl = 900; h = 40; p = 0; d = 8; break;
+      case 'oaze': zone(4, 110, 170, 2.2, .12); pl = 500; h = 55; p = 5; P.pred.capK = 14; break;
+      case 'arhipelag': zone(6, 90, 140, 2, .15); pl = 450; h = 50; p = 4; P.pred.capK = 8; break;
+      case 'pustiu': pl = 300; h = 0; p = 0; d = 0; break;
+    }
+    for (let i = 0; i < pl * k; i++){ const [x, y] = randFertile(); const q = plant(x, y); q.e = rand(4, 12); S.plants.push(q); }
+    const put = (t, n) => { for (let i = 0; i < n; i++){ const [x, y] = randFertile(); const c = creature(t, x, y);
+      c.age = (rand(0, .6) * SPEC[t].maxAge) | 0; c.e *= rand(.8, 1.4); S[t].push(c); } };
+    put('herb', h ? Math.max(20, h * k) : 0);
+    put('pred', p ? Math.max(3, p * k) : 0);
+    put('dec', d ? Math.max(5, d * k) : 0);
+  }
+
+  // ---------- intervenții ----------
+  function add(type, x, y){
+    if (type === 'plant'){ if (Math.random() < Math.min(1, fertAt(wrap(x, S.W), wrap(y, S.H)) + .3)) S.plants.push(plant(x, y)); return null; }
+    if (S[type].length >= SPEC[type].hardCap) return null;
+    const c = creature(type, x, y); S[type].push(c); return c;
+  }
+  function inRadius(x, y, r, fn){
+    for (const t of TYPES) for (const c of S[t]) if (!c.dead && tdist(x, y, c.x, c.y) < r) fn(c);
+  }
+  function blast(x, y, r){
+    let n = 0;
+    for (const p of S.plants) if (tdist(x, y, p.x, p.y) < r){ p.dead = true; n++; }
+    for (const c of S.corpses) if (tdist(x, y, c.x, c.y) < r) c.dead = true;
+    inRadius(x, y, r, c => { die(c, 'meteorit', 0); n++; });
+    forCells(x, y, r, (i, t) => { S.nutr[i] = Math.min(2, S.nutr[i] + .9 * t); });  // cenușa fertilizează
+    for (const k of ['plants','herb','pred','dec','corpses']) compact(S[k]);
+    return n;
+  }
+  function erase(x, y, r){
+    let n = 0;
+    inRadius(x, y, r, c => { die(c, 'eliminat', 0); n++; });
+    for (const t of TYPES) compact(S[t]);
+    return n;
+  }
+  function infect(x, y, r){
+    let n = 0;
+    inRadius(x, y, r, c => { if (!c.immune && !c.sick){ c.sick = P.diseaseLen; n++; } });
+    return n;
+  }
+  function paintSoil(x, y, r, delta){
+    forCells(x, y, r, (i, t) => { S.soil[i] = clamp(S.soil[i] + delta * t, .02, 2.5); });
+  }
+  function pick(x, y, r){
+    let best = null, bd = r;
+    for (const t of TYPES) for (const c of S[t]){ const d = tdist(x, y, c.x, c.y); if (d < bd){ bd = d; best = c; } }
+    return best;
+  }
+  function cloneOf(c){
+    if (S[c.type].length >= SPEC[c.type].hardCap) return null;
+    const n = creature(c.type, c.x + rand(-8, 8), c.y + rand(-8, 8));
+    n.g = Object.assign({}, c.g); n.gen = c.gen; n.immune = c.immune;
+    S[c.type].push(n); return n;
+  }
+  function stats(list){
+    if (!list.length) return null;
+    let s = 0, v = 0, z = 0, g = 0, age = 0, e = 0, sick = 0, imm = 0;
+    for (const c of list){ s += c.g.speed; v += c.g.sense; z += c.g.size; g = Math.max(g, c.gen);
+      age += c.age; e += c.e; if (c.sick > 0) sick++; if (c.immune) imm++; }
+    const n = list.length;
+    return { speed: s / n, sense: v / n, size: z / n, gen: g, age: age / n, e: e / n, sick, imm };
+  }
+  return { S, P, DEFAULTS, SPEC, TYPES, SC, copy, resize, seed, step, add, blast, erase, infect,
+           paintSoil, pick, cloneOf, stats, capOf, fertAt, seasonInfo, seasonMod };
+})();
+if (typeof module !== 'undefined') module.exports = Sim;
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('world'), ctx = cv.getContext('2d');
+  const gcv = $('graph'), gctx = gcv.getContext('2d');
+  const S = Sim.S, P = Sim.P, SPEC = Sim.SPEC, TAU = Math.PI * 2;
+  const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
+  const COL = { plant:'91,227,138', herb:'79,216,255', pred:'255,79,139', dec:'255,190,80',
+                fertile:'110,235,160', desert:'214,160,90', disease:'200,255,90', meteor:'255,150,70',
+                erase:'200,210,230', inspect:'230,236,255' };
+  const NAMES = { herb:'Erbivor', pred:'Prădător', dec:'Descompunător' };
+  const CAUSES = { foame:'foame', batranete:'bătrânețe', vanat:'vânați', boala:'boală', meteorit:'meteorit', eliminat:'eliminați' };
+  const isMobile = () => innerWidth <= 820;
+
+  // ---------- stare UI ----------
+  const V = { auto:true, trails:true, trailLen:.7, glow:true, detail:true, sense:false, energy:false,
+              heat:false, corpses:true, lines:false };
+  let DPR = 1, Z = 1, cam = { x:0, y:0, zoom:1 }, camMoved = false;
+  let paused = false, speedIdx = 4, stepAcc = 0, alpha = 1;
+  let tool = 'herb', brush = 45, qty = 5, scenario = 'echilibru';
+  let selected = null, follow = false;
+  let effects = [], history = [], gMode = 'pop', collapseAt = 0, frame = 0;
+  const HIST = 420;
+  const hidden = { p:false, h:false, r:false, d:false };
+
+  // ---------- dimensiuni & cameră ----------
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = innerWidth * DPR; cv.height = innerHeight * DPR;
+    Z = Math.min(1, Math.sqrt(innerWidth * innerHeight / 1e6));   // ecran mic → lume mai mare, afișată micșorat
+    Sim.resize(innerWidth / Z, innerHeight / Z);
+    const r = gcv.getBoundingClientRect();
+    gcv.width = Math.max(1, r.width * DPR); gcv.height = Math.max(1, r.height * DPR);
+    clampCam(); clearAll();
+  }
+  const scale = () => Z * cam.zoom;
+  const viewW = () => innerWidth / scale(), viewH = () => innerHeight / scale();
+  function clampCam(){
+    cam.zoom = Math.max(1, Math.min(8, cam.zoom));
+    cam.x = Math.max(0, Math.min(S.W - viewW(), cam.x));
+    cam.y = Math.max(0, Math.min(S.H - viewH(), cam.y));
+    $('zV').textContent = cam.zoom.toFixed(1) + '×';
+    camMoved = true;
+  }
+  const toWorld = (sx, sy) => ({ x: cam.x + sx / scale(), y: cam.y + sy / scale() });
+  function zoomAt(sx, sy, f){
+    const w = toWorld(sx, sy);
+    cam.zoom = Math.max(1, Math.min(8, cam.zoom * f));
+    cam.x = w.x - sx / scale(); cam.y = w.y - sy / scale();
+    clampCam();
+  }
+  function resetCam(){ cam = { x:0, y:0, zoom:1 }; follow = false; clampCam(); }
+  function clearAll(){ ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = '#04060b'; ctx.fillRect(0, 0, cv.width, cv.height); }
+
+  // ---------- jurnal & banner ----------
+  const fmtTime = t => { const s = Math.floor(t / 60); return String(Math.floor(s / 60)).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0'); };
+  function log(html){
+    const li = document.createElement('li');
+    li.innerHTML = `<b>${fmtTime(S.tick)}</b> ${html}`;
+    const ul = $('log'); ul.prepend(li);
+    while (ul.children.length > 9) ul.lastChild.remove();
+  }
+  let bannerT;
+  function banner(t, p){
+    $('bTitle').textContent = t; $('bText').textContent = p;
+    $('banner').classList.add('show'); clearTimeout(bannerT);
+    bannerT = setTimeout(() => $('banner').classList.remove('show'), 3200);
+  }
+
+  S.onEvent = (type, x, y, who) => {
+    if (effects.length > 160) return;
+    if (type === 'kill') effects.push({ x, y, r:2, max:14, c:COL.pred, life:1, k:.05 });
+    else if (type === 'birth' && who === 'pred') effects.push({ x, y, r:2, max:20, c:'255,150,190', life:1, k:.04 });
+    else if (type === 'outbreak'){ effects.push({ x, y, r:4, max:60, c:COL.disease, life:1, k:.012 });
+      log(`<span style="color:var(--sick)">Focar de boală</span> la ${who === 'herb' ? 'erbivore' : 'prădători'}.`); }
+  };
+
+  // ---------- pornire ----------
+  const flags = {};
+  const milestone = { herb:0, pred:0, dec:0 };
+  function start(name){
+    if (name) scenario = name;
+    Object.assign(P, Sim.copy(Sim.DEFAULTS), keepUserParams());
+    Sim.seed(scenario);
+    syncUI();
+    history = []; effects = []; collapseAt = 0; selected = null; follow = false; renderInspector();
+    for (const k in flags) delete flags[k];
+    milestone.herb = milestone.pred = milestone.dec = 0;
+    clearAll();
+    log(`Lume nouă: <b>${$('scen').selectedOptions[0].text}</b>.`);
+  }
+  // păstrăm setările făcute de utilizator între resetări (scenariul doar le suprascrie pe ale lui)
+  let userP = null;
+  function keepUserParams(){ return userP ? Sim.copy(userP) : {}; }
+  function rememberParams(){ userP = Sim.copy(P); }
+
+  // ---------- monitorizare ----------
+  function watch(){
+    const h = S.herb.length, p = S.pred.length, d = S.dec.length;
+    if (!h && !p){
+      if (!collapseAt){
+        collapseAt = performance.now();
+        log('<span style="color:var(--warn)">Colaps total al faunei.</span>');
+        banner('Colaps', V.auto ? 'Viața o ia de la capăt…' : 'Adaugă creaturi sau apasă ↺.');
+      } else if (V.auto && performance.now() - collapseAt > 3500) start();
+      return;
+    }
+    collapseAt = 0;
+    const ext = (key, n, gone, back) => {
+      if (!n && !flags[key]){ flags[key] = true; log(gone); }
+      else if (n && flags[key]){ flags[key] = false; log(back); }
+    };
+    ext('h0', h, 'Ultimul erbivor a murit. Prădătorii vor flămânzi.', 'Erbivorele s-au întors.');
+    ext('p0', p, 'Prădătorii au dispărut. Erbivorele explodează.', 'Prădătorii s-au întors.');
+    ext('d0', d, 'Descompunătorii au dispărut — hoiturile se adună.', 'Descompunătorii s-au întors.');
+    const boom = h > Sim.capOf('herb') * .85;
+    if (boom && !flags.boom){ flags.boom = true; log('Explozie demografică la erbivore.'); } else if (h < Sim.capOf('herb') * .5) flags.boom = false;
+    for (const [t, step, label] of [['herb', 25, 'Erbivorele'], ['pred', 10, 'Prădătorii'], ['dec', 25, 'Descompunătorii']]){
+      const g = S.maxGen[t];
+      if (g >= milestone[t] + step){ milestone[t] = g - g % step; log(`${label} au ajuns la generația <b>${milestone[t]}</b>.`); }
+    }
+    for (const t of ['herb', 'pred']){
+      const L = S[t]; let sick = 0; for (const c of L) if (c.sick > 0) sick++;
+      const k = 'ep' + t;
+      if (L.length > 10 && sick > L.length * .2 && !flags[k]){ flags[k] = true; log(`<span style="color:var(--sick)">Epidemie</span> printre ${t === 'herb' ? 'erbivore' : 'prădători'} (${sick} bolnavi).`); }
+      else if (sick < L.length * .03) flags[k] = false;
+    }
+  }
+
+  // ---------- desenare ----------
+  let X = 0, Y = 0;
+  function pos(c){
+    if (alpha >= 1){ X = c.x; Y = c.y; return; }
+    const dx = c.x - c.px, dy = c.y - c.py;
+    if (dx > 20 || dx < -20 || dy > 20 || dy < -20){ X = c.x; Y = c.y; return; }
+    X = c.px + dx * alpha; Y = c.py + dy * alpha;
+  }
+  let vx0, vy0, vx1, vy1;
+  const vis = (x, y, m) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
+
+  function drawGround(){
+    const SC = Sim.SC, c0 = Math.max(0, (vx0 / SC) | 0), c1 = Math.min(S.scols - 1, (vx1 / SC) | 0);
+    const r0 = Math.max(0, (vy0 / SC) | 0), r1 = Math.min(S.srows - 1, (vy1 / SC) | 0);
+    for (let y = r0; y <= r1; y++) for (let x = c0; x <= c1; x++){
+      const i = y * S.scols + x, soil = S.soil[i];
+      if (V.heat){
+        const f = soil * (.6 + S.nutr[i]);
+        if (f < 1) ctx.fillStyle = `rgba(170,105,50,${(1 - f) * .22})`;
+        else ctx.fillStyle = `rgba(70,230,190,${Math.min(.3, (f - 1) * .16)})`;
+        ctx.fillRect(x * SC, y * SC, SC + .5, SC + .5);
+      } else if (soil < .95){ ctx.fillStyle = `rgba(150,100,50,${(1 - soil) * .07})`; ctx.fillRect(x * SC, y * SC, SC + .5, SC + .5); }
+      else if (soil > 1.05){ ctx.fillStyle = `rgba(60,200,120,${Math.min(.06, (soil - 1) * .04)})`; ctx.fillRect(x * SC, y * SC, SC + .5, SC + .5); }
+    }
+  }
+
+  function drawPlants(det){
+    if (!det){
+      ctx.fillStyle = 'rgba(70,215,120,0.78)';
+      ctx.beginPath();
+      for (const p of S.plants){ if (!vis(p.x, p.y, 4)) continue; const r = .8 + p.e * .18; ctx.moveTo(p.x + r, p.y); ctx.arc(p.x, p.y, r, 0, TAU); }
+      ctx.fill(); return;
+    }
+    for (const p of S.plants){
+      if (!vis(p.x, p.y, 6)) continue;
+      const r = .9 + p.e * .2;
+      ctx.fillStyle = `rgba(${60 + p.e * 4},${170 + p.e * 4},110,.85)`;
+      ctx.beginPath();
+      for (let k = 0; k < 3; k++){ const a = p.rot + k * TAU / 3, lx = p.x + Math.cos(a) * r * .75, ly = p.y + Math.sin(a) * r * .75;
+        ctx.moveTo(lx + r * .62, ly); ctx.arc(lx, ly, r * .62, 0, TAU); }
+      ctx.fill();
+      if (p.e > 10.5){ ctx.fillStyle = 'rgba(255,220,240,.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, r * .32, 0, TAU); ctx.fill(); }
+    }
+  }
+
+  function drawCorpses(det){
+    for (const c of S.corpses){
+      if (!vis(c.x, c.y, 6)) continue;
+      const k = c.e / c.e0;
+      ctx.fillStyle = `rgba(150,140,128,${.15 + k * .35})`;
+      if (det){
+        ctx.beginPath(); ctx.arc(c.x, c.y, 1.5 + k * 3, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(90,80,70,${.4 * k})`; ctx.lineWidth = .4;
+        ctx.beginPath(); ctx.moveTo(c.x - 2, c.y - 2); ctx.lineTo(c.x + 2, c.y + 2); ctx.moveTo(c.x + 2, c.y - 2); ctx.lineTo(c.x - 2, c.y + 2); ctx.stroke();
+      } else { ctx.fillRect(c.x - 1, c.y - 1, 2 + k, 2 + k); }
+    }
+  }
+
+  const hueH = c => 190 - (c.g.speed - 1.3) * 50;
+  const hueR = c => 335 + (c.g.speed - 1.5) * 30;
+  const hueD = c => 38 + (c.g.speed - 1.1) * 18;
+
+  function drawHerb(c, det, t){
+    const r = c.g.size, h = hueH(c), a = .4 + Math.min(1, c.e / 60) * .6;
+    if (!det){
+      ctx.fillStyle = `hsla(${h},95%,62%,${a})`;
+      ctx.beginPath(); ctx.arc(X, Y, r, 0, TAU); ctx.fill();
+      ctx.fillStyle = `hsla(${h},95%,85%,${a})`;
+      ctx.beginPath(); ctx.arc(X + Math.cos(c.a) * r * .55, Y + Math.sin(c.a) * r * .55, r * .35, 0, TAU); ctx.fill();
+      return;
+    }
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(c.a);
+    ctx.strokeStyle = `hsla(${h},90%,72%,.55)`; ctx.lineWidth = .35;
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++){
+      const ang = k / 10 * TAU, w = Math.sin(t * .35 + k * 1.3 + c.id) * .35;
+      const bx = Math.cos(ang) * r * 1.2, by = Math.sin(ang) * r * .88;
+      ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(ang + w) * r * .55, by + Math.sin(ang + w) * r * .45);
+    }
+    ctx.stroke();
+    ctx.fillStyle = `hsla(${h},85%,55%,${a * .9})`;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.25, r * .9, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = `hsla(${h},95%,80%,${a})`; ctx.lineWidth = .5; ctx.stroke();
+    ctx.fillStyle = `hsla(${h + 30},80%,35%,.7)`;
+    ctx.beginPath(); ctx.ellipse(-r * .35, 0, r * .38, r * .3, 0, 0, TAU); ctx.fill();
+    for (const s of [-1, 1]){
+      ctx.fillStyle = '#eef8ff'; ctx.beginPath(); ctx.arc(r * .72, s * r * .38, r * .24, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#071018'; ctx.beginPath(); ctx.arc(r * .8, s * r * .38, r * .12, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawPred(c, det, t){
+    const r = c.g.size, h = hueR(c), a = .5 + Math.min(1, c.e / 120) * .5, ang = c.a;
+    if (!det){
+      ctx.fillStyle = `hsla(${h},100%,62%,${a})`;
+      ctx.beginPath();
+      ctx.moveTo(X + Math.cos(ang) * r * 1.5, Y + Math.sin(ang) * r * 1.5);
+      ctx.lineTo(X + Math.cos(ang + 2.4) * r, Y + Math.sin(ang + 2.4) * r);
+      ctx.lineTo(X + Math.cos(ang - 2.4) * r, Y + Math.sin(ang - 2.4) * r);
+      ctx.closePath(); ctx.fill(); return;
+    }
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(ang);
+    ctx.fillStyle = `hsla(${h},90%,55%,${a * .8})`;
+    for (let i = 1; i <= 4; i++){
+      const bx = -r * (.7 + i * .55), by = Math.sin(t * .3 + c.id - i * .8) * r * .18 * i;
+      ctx.beginPath(); ctx.arc(bx, by, r * (.5 - i * .08), 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = `hsla(${h},100%,60%,${a})`;
+    ctx.beginPath();
+    ctx.moveTo(r * 1.5, 0); ctx.quadraticCurveTo(r * .4, r * 1.1, -r * .9, r * .45);
+    ctx.lineTo(-r * .9, -r * .45); ctx.quadraticCurveTo(r * .4, -r * 1.1, r * 1.5, 0); ctx.fill();
+    ctx.strokeStyle = `hsla(${h},100%,82%,${a})`; ctx.lineWidth = .5; ctx.stroke();
+    // spini
+    ctx.strokeStyle = `hsla(${h},100%,75%,.7)`; ctx.lineWidth = .6; ctx.beginPath();
+    for (let k = -2; k <= 2; k++){ const x = k * r * .3; ctx.moveTo(x, -r * .55); ctx.lineTo(x - r * .3, -r * .95); ctx.moveTo(x, r * .55); ctx.lineTo(x - r * .3, r * .95); }
+    ctx.stroke();
+    // fălci
+    const jaw = c.state === 'vânează' ? .35 + Math.abs(Math.sin(t * .4)) * .4 : .15;
+    ctx.strokeStyle = `hsla(${h},100%,88%,.95)`; ctx.lineWidth = .8; ctx.beginPath();
+    ctx.moveTo(r * 1.2, r * .15); ctx.lineTo(r * 1.2 + Math.cos(jaw) * r * .8, r * .15 + Math.sin(jaw) * r * .8);
+    ctx.moveTo(r * 1.2, -r * .15); ctx.lineTo(r * 1.2 + Math.cos(-jaw) * r * .8, -r * .15 + Math.sin(-jaw) * r * .8);
+    ctx.stroke();
+    for (const s of [-1, 1]){ ctx.fillStyle = '#fff2c0'; ctx.beginPath(); ctx.arc(r * .7, s * r * .3, r * .16, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#300'; ctx.beginPath(); ctx.arc(r * .76, s * r * .3, r * .08, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
+  function drawDec(c, det, t){
+    const r = c.g.size, h = hueD(c), a = .45 + Math.min(1, c.e / 50) * .55;
+    if (!det){
+      ctx.fillStyle = `hsla(${h},100%,60%,${a})`;
+      ctx.beginPath(); ctx.moveTo(X + r * 1.3, Y); ctx.lineTo(X, Y + r * 1.3); ctx.lineTo(X - r * 1.3, Y); ctx.lineTo(X, Y - r * 1.3); ctx.closePath(); ctx.fill();
+      return;
+    }
+    ctx.save(); ctx.translate(X, Y); ctx.rotate(c.a);
+    ctx.strokeStyle = `hsla(${h},100%,65%,${a * .8})`; ctx.lineWidth = .6; ctx.beginPath();
+    for (let k = 0; k < 6; k++){
+      const ang = k / 6 * TAU + Math.sin(t * .05 + c.id) * .3, w = Math.sin(t * .2 + k * 2 + c.id) * .6;
+      ctx.moveTo(Math.cos(ang) * r * .8, Math.sin(ang) * r * .8);
+      ctx.quadraticCurveTo(Math.cos(ang + w * .5) * r * 1.8, Math.sin(ang + w * .5) * r * 1.8, Math.cos(ang + w) * r * 2.5, Math.sin(ang + w) * r * 2.5);
+    }
+    ctx.stroke();
+    ctx.fillStyle = `hsla(${h},100%,58%,${a})`; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = `hsla(${h - 15},90%,35%,.8)`;
+    for (let k = 0; k < 3; k++){ ctx.beginPath(); ctx.arc(Math.cos(k * 2.1) * r * .4, Math.sin(k * 2.1) * r * .4, r * .22, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
+  const DRAW = { herb: drawHerb, pred: drawPred, dec: drawDec };
+
+  function overlays(c){
+    const r = c.g.size;
+    if (c.sick > 0){
+      ctx.strokeStyle = `rgba(${COL.disease},${.35 + Math.sin(frame * .15 + c.id) * .25})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(X, Y, r * 2.1, 0, TAU); ctx.stroke();
+    }
+    if (V.sense){ ctx.strokeStyle = `rgba(${COL[c.type]},.07)`; ctx.lineWidth = .7; ctx.beginPath(); ctx.arc(X, Y, c.g.sense, 0, TAU); ctx.stroke(); }
+    if (V.lines && c.tgt && !c.tgt.dead){
+      const dx = c.tgt.x - c.x, dy = c.tgt.y - c.y;
+      if (Math.abs(dx) < 220 && Math.abs(dy) < 220){
+        ctx.strokeStyle = c.state === 'fuge' ? 'rgba(255,255,255,.18)' : `rgba(${COL[c.type]},.3)`; ctx.lineWidth = .6;
+        ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + dx, Y + dy); ctx.stroke();
+      }
+    }
+    if (V.energy){
+      const max = SPEC[c.type].maxE, k = Math.max(0, Math.min(1, c.e / max)), w = r * 2.4;
+      ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(X - w / 2, Y - r * 2 - 3, w, 1.4);
+      ctx.fillStyle = `hsl(${k * 120},90%,55%)`; ctx.fillRect(X - w / 2, Y - r * 2 - 3, w * k, 1.4);
+    }
+  }
+
+  function draw(){
+    const s = scale(), t = frame;
+    vx0 = cam.x; vy0 = cam.y; vx1 = cam.x + viewW(); vy1 = cam.y + viewH();
+    const det = V.detail && s >= 1.8;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    const fade = camMoved ? 1 : (V.trails ? Math.max(.06, 1 - V.trailLen) : 1);
+    ctx.fillStyle = `rgba(4,6,11,${fade})`;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    camMoved = false;
+    ctx.setTransform(DPR * s, 0, 0, DPR * s, -cam.x * DPR * s, -cam.y * DPR * s);
+
+    drawGround();
+    if (V.corpses) drawCorpses(det);
+    ctx.globalCompositeOperation = (V.glow && !det) ? 'lighter' : 'source-over';
+    drawPlants(det);
+    for (const type of ['dec', 'herb', 'pred']){
+      const f = DRAW[type];
+      for (const c of S[type]){
+        pos(c);
+        if (!vis(X, Y, 30)) continue;
+        f(c, det, t);
+        if (c.sick > 0 || V.sense || V.lines || V.energy) overlays(c);
+      }
+    }
+
+    // efecte
+    ctx.lineWidth = 1.5;
+    for (const f of effects){
+      f.r += (f.max - f.r) * .12; f.life -= f.k;
+      ctx.strokeStyle = `rgba(${f.c},${Math.max(0, f.life)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, TAU); ctx.stroke();
+    }
+    effects = effects.filter(f => f.life > 0);
+
+    ctx.globalCompositeOperation = 'source-over';
+    // creatura selectată
+    if (selected && !selected.dead){
+      const c = selected; pos(c);
+      ctx.setLineDash([3, 3]); ctx.strokeStyle = `rgba(${COL[c.type]},.55)`; ctx.lineWidth = 1 / cam.zoom;
+      ctx.beginPath(); ctx.arc(X, Y, c.g.sense, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2 / cam.zoom;
+      ctx.beginPath(); ctx.arc(X, Y, c.g.size * 2 + 3, 0, TAU); ctx.stroke();
+      if (c.tgt && !c.tgt.dead){
+        const dx = c.tgt.x - c.x, dy = c.tgt.y - c.y;
+        if (Math.abs(dx) < 260 && Math.abs(dy) < 260){
+          ctx.strokeStyle = c.state === 'fuge' ? 'rgba(255,90,120,.8)' : 'rgba(255,255,255,.6)';
+          ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + dx, Y + dy); ctx.stroke();
+        }
+      }
+    }
+    // pensula
+    if (pointer.in && !panState && tool !== 'inspect'){
+      const w = toWorld(pointer.sx, pointer.sy), creatureTool = SPEC[tool];
+      const r = creatureTool ? Math.min(brush, 12 + qty * 3) : brush;
+      ctx.strokeStyle = `rgba(${COL[tool]},.55)`; ctx.lineWidth = 1 / s; ctx.setLineDash([4 / s, 4 / s]);
+      ctx.beginPath(); ctx.arc(w.x, w.y, r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // ---------- grafic ----------
+  const SERIES = {
+    pop: [['p','Plante','#5be38a'], ['h','Erbivore','#4fd8ff'], ['r','Prădători','#ff4f8b'], ['d','Descomp.','#ffbe50']],
+    evo: [['hs','Erbivore','#4fd8ff'], ['rs','Prădători','#ff4f8b'], ['ds','Descomp.','#ffbe50']]
+  };
+  function buildChips(){
+    const box = $('chips'); box.innerHTML = '';
+    for (const [k, label, col] of SERIES[gMode]){
+      const key = k[0] === 'h' ? 'h' : k[0] === 'r' ? 'r' : k[0] === 'd' ? 'd' : 'p';
+      const el = document.createElement('span');
+      el.className = 'chip' + (hidden[key] ? ' off' : ''); el.style.color = col; el.style.borderColor = col + '55';
+      el.dataset.k = k; el.innerHTML = `${label} <b id="chip_${k}"></b>`;
+      el.onclick = () => { hidden[key] = !hidden[key]; el.classList.toggle('off', hidden[key]); drawGraph(); };
+      box.appendChild(el);
+    }
+  }
+  function drawGraph(){
+    const w = gcv.width / DPR, h = gcv.height / DPR;
+    gctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    gctx.clearRect(0, 0, w, h);
+    gctx.strokeStyle = 'rgba(140,170,220,.08)'; gctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++){ gctx.beginPath(); gctx.moveTo(0, h * i / 4); gctx.lineTo(w, h * i / 4); gctx.stroke(); }
+    const last = history[history.length - 1];
+    for (const [k] of SERIES[gMode]){ const el = $('chip_' + k); if (el) el.textContent = last ? (gMode === 'pop' ? last[k] : (last[k] || 0).toFixed(2)) : ''; }
+    if (history.length < 2) return;
+    let lo = 0, hi = 1;
+    if (gMode === 'evo'){ lo = .4; hi = 3.6;
+      gctx.fillStyle = 'rgba(125,138,163,.6)'; gctx.font = '9px JetBrains Mono, monospace';
+      for (const v of [1, 2, 3]){ const y = h - 4 - (v - lo) / (hi - lo) * (h - 10); gctx.fillText(v + '.0', 2, y - 2); }
+    }
+    for (const [k, , col] of SERIES[gMode]){
+      const key = k[0] === 'h' ? 'h' : k[0] === 'r' ? 'r' : k[0] === 'd' ? 'd' : 'p';
+      if (hidden[key]) continue;
+      let mx = 1;
+      if (gMode === 'pop') for (const s of history) mx = Math.max(mx, s[k]);
+      gctx.strokeStyle = col; gctx.lineWidth = k === 'p' ? 1 : 1.6; gctx.globalAlpha = k === 'p' ? .6 : 1;
+      gctx.beginPath(); let started = false;
+      history.forEach((s, i) => {
+        const v = s[k]; if (v == null){ started = false; return; }
+        const x = i / (HIST - 1) * w;
+        const y = gMode === 'pop' ? h - 4 - (v / mx) * (h - 10) : h - 4 - (v - lo) / (hi - lo) * (h - 10);
+        started ? gctx.lineTo(x, y) : gctx.moveTo(x, y); started = true;
+      });
+      gctx.stroke(); gctx.globalAlpha = 1;
+    }
+  }
+  document.querySelectorAll('.gt').forEach(b => b.onclick = () => {
+    gMode = b.dataset.g; document.querySelectorAll('.gt').forEach(x => x.classList.toggle('on', x === b));
+    buildChips(); drawGraph();
+  });
+
+  // ---------- statistici ----------
+  function updateStats(){
+    const set = (id, v) => { const el = $(id); if (el.textContent !== String(v)) el.textContent = v; };
+    set('cP', S.plants.length); set('cH', S.herb.length); set('cR', S.pred.length); set('cD', S.dec.length);
+    set('mH', '● ' + S.herb.length); set('mR', '▲ ' + S.pred.length); set('mD', '◆ ' + S.dec.length);
+    const si = Sim.seasonInfo();
+    set('sIc', si.icon); set('sName', si.name); set('sTime', fmtTime(S.tick));
+    $('sBar').style.width = (si.phase * 100).toFixed(1) + '%';
+    set('sFert', `Fertilitate efectivă ${Math.round(P.fertility * Sim.seasonMod() * 100)}% · ${S.corpses.length} hoituri`);
+    for (const [t, p] of [['herb','H'], ['pred','R'], ['dec','D']]){
+      const st = Sim.stats(S[t]);
+      set('t' + p + 'n', S[t].length);
+      set('t' + p + 's', st ? st.speed.toFixed(2) : '–'); set('t' + p + 'v', st ? st.sense.toFixed(0) : '–');
+      set('t' + p + 'z', st ? st.size.toFixed(1) : '–'); set('t' + p + 'g', st ? st.gen : '–');
+      set('t' + p + 'a', st ? (st.age / 60).toFixed(0) + 's' : '–');
+    }
+    set('sCap', `Capacitate: ${Sim.capOf('herb')} erbivore · ${Sim.capOf('pred')} prădători · ${Sim.capOf('dec')} descomp.`);
+    const D = S.stats.deaths, B = S.stats.births;
+    let html = '<tr><th></th><th class="c-herb">erbiv.</th><th class="c-pred">prăd.</th><th class="c-dec">desc.</th></tr>';
+    html += `<tr><td>nașteri</td><td>${B.herb}</td><td>${B.pred}</td><td>${B.dec}</td></tr>`;
+    for (const k in CAUSES){
+      const a = D.herb[k] || 0, b = D.pred[k] || 0, c = D.dec[k] || 0;
+      if (a + b + c) html += `<tr><td>${CAUSES[k]}</td><td>${a}</td><td>${b}</td><td>${c}</td></tr>`;
+    }
+    if ($('causes').innerHTML !== html) $('causes').innerHTML = html;
+  }
+
+  // ---------- inspector ----------
+  function renderInspector(){
+    const box = $('insp');
+    if (!selected){ box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const c = selected, col = COL[c.type];
+    box.innerHTML = `
+      <div class="ih"><span style="color:rgb(${col})">${c.type === 'pred' ? '▲' : c.type === 'dec' ? '◆' : '●'}</span>${NAMES[c.type]} <span class="mini">#${c.id}</span><button id="iClose">✕</button></div>
+      <div class="ist" id="iState"></div>
+      <div class="igrid">
+        <div><span>Generație</span> <b id="iGen"></b></div><div><span>Vârstă</span> <b id="iAge"></b></div>
+        <div><span>Pui</span> <b id="iKids"></b></div><div><span id="iEatL">${c.type === 'pred' ? 'Prăzi' : c.type === 'dec' ? 'Hoituri' : 'Plante'}</span> <b id="iEat"></b></div>
+        <div><span>Părinte</span> <b>${c.parentId ? '#' + c.parentId : '—'}</b></div><div><span>Sănătate</span> <b id="iHealth"></b></div>
+      </div>
+      <div class="gene"><span>energie</span><div class="gbar"><i id="iE" style="background:#6fe39a"></i></div><b id="iEv"></b></div>
+      ${['speed','sense','size'].map(k => `<div class="gene"><span>${{speed:'viteză',sense:'văz',size:'talie'}[k]}</span><div class="gbar"><i id="iG_${k}" style="background:rgb(${col})"></i><u id="iA_${k}"></u></div><b id="iV_${k}"></b></div>`).join('')}
+      <div class="mini" style="margin-top:4px">Linia albă = media speciei. Barele arată gena în intervalul posibil.</div>
+      <div class="ibtn"><button id="iFollow">${follow ? '◉ Urmărești' : '◎ Urmărește'}</button><button id="iClone">⧉ Clonează</button><button id="iKill">✕ Elimină</button></div>`;
+    $('iClose').onclick = () => { selected = null; follow = false; renderInspector(); };
+    $('iFollow').onclick = () => { follow = !follow; if (follow && cam.zoom < 2.5){ cam.zoom = 3; clampCam(); } renderInspector(); };
+    $('iClone').onclick = () => { if (!selected.dead){ const n = Sim.cloneOf(selected); if (n) effects.push({ x:n.x, y:n.y, r:2, max:18, c:col, life:1, k:.04 }); } };
+    $('iKill').onclick = () => { if (!selected.dead){ Sim.erase(selected.x, selected.y, .5); } updateInspector(); };
+    updateInspector();
+  }
+  function updateInspector(){
+    if (!selected) return;
+    const c = selected, sp = SPEC[c.type], st = Sim.stats(S[c.type]);
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    if (c.dead){
+      set('iState', `† Mort — ${CAUSES[c.cause] || c.cause} (la ${(c.age / 60).toFixed(0)} s)`);
+      $('iState').style.color = 'var(--warn)';
+    } else { set('iState', 'stare: ' + c.state); $('iState').style.color = ''; }
+    set('iGen', c.gen); set('iAge', (c.age / 60).toFixed(0) + ' s'); set('iKids', c.kids);
+    set('iEat', c.type === 'pred' ? c.kills : c.eaten);
+    set('iHealth', c.sick > 0 ? `bolnav (${(c.sick / 60).toFixed(0)} s)` : c.immune ? 'imun' : 'sănătos');
+    const k = Math.max(0, Math.min(1, c.e / sp.maxE));
+    const ie = $('iE'); if (ie){ ie.style.width = (k * 100) + '%'; ie.style.background = `hsl(${k * 120},80%,55%)`; }
+    set('iEv', c.e.toFixed(0));
+    for (const g of ['speed', 'sense', 'size']){
+      const [, lo, hi] = sp.genes[g], f = v => ((v - lo) / (hi - lo) * 100) + '%';
+      const bar = $('iG_' + g); if (bar) bar.style.width = f(c.g[g]);
+      const av = $('iA_' + g); if (av && st) av.style.left = f(st[g]);
+      set('iV_' + g, c.g[g].toFixed(g === 'sense' ? 0 : 2));
+    }
+  }
+
+  // ---------- buclă ----------
+  function doStep(){
+    Sim.step();
+    if (S.tick % 15 === 0){
+      const a = Sim.stats(S.herb), b = Sim.stats(S.pred), d = Sim.stats(S.dec);
+      history.push({ p:S.plants.length, h:S.herb.length, r:S.pred.length, d:S.dec.length,
+                     hs:a ? a.speed : null, rs:b ? b.speed : null, ds:d ? d.speed : null });
+      if (history.length > HIST) history.shift();
+    }
+  }
+  function loop(){
+    if (!paused){
+      const sp = SPEEDS[speedIdx];
+      stepAcc += sp;
+      let n = 0;
+      while (stepAcc >= 1 && n < 10){ stepAcc--; doStep(); n++; }
+      if (n >= 10) stepAcc = 0;
+      alpha = sp < 1 ? stepAcc : 1;   // la viteze sub 1× poziția e interpolată între pași, ca mișcarea să rămână lină
+      watch();
+    } else alpha = 1;
+    holdTool();
+    if (follow && selected && !selected.dead){
+      const tx = selected.x - viewW() / 2, ty = selected.y - viewH() / 2;
+      if (Math.abs(tx - cam.x) > S.W / 2 || Math.abs(ty - cam.y) > S.H / 2){ cam.x = tx; cam.y = ty; }
+      else { cam.x += (tx - cam.x) * .12; cam.y += (ty - cam.y) * .12; }
+      clampCam();
+    } else if (follow && (!selected || selected.dead)){ follow = false; if (selected) renderInspector(); }
+    draw();
+    frame++;
+    if (frame % 10 === 0){ updateStats(); drawGraph(); }
+    if (frame % 5 === 0) updateInspector();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- unelte ----------
+  const TOOLS = [
+    ['inspect','⌖','Inspectează','0','Clic pe o creatură ca să-i vezi genele, starea și istoria. Trage ca să muți camera.'],
+    ['plant','❀','Plante','1','Seamănă plante. Prind mai ușor pe sol fertil.'],
+    ['herb','●','Erbivore','2','Adaugă erbivore (cantitatea aleasă la fiecare clic). Trage pentru mai multe.'],
+    ['pred','▲','Prădători','3','Adaugă prădători. Peste capacitatea lumii se pot adăuga, dar nu se mai înmulțesc.'],
+    ['dec','◆','Descompun.','4','Adaugă descompunători: mănâncă hoituri și fertilizează solul.'],
+    ['fertile','▦','Sol fertil','5','Pictează sol fertil: plantele cresc mai repede și mai des.'],
+    ['desert','░','Deșert','6','Pictează deșert: aproape nimic nu crește aici.'],
+    ['disease','☣','Epidemie','7','Infectează creaturile din zonă. Boala se transmite prin contact; supraviețuitorii devin imuni.'],
+    ['meteor','✷','Meteorit','8','Șterge tot din zonă. Cenușa lasă în urmă sol bogat în nutrienți.'],
+    ['erase','⌫','Radieră','9','Elimină creaturi fără să lase hoituri.']
+  ];
+  const toolBox = $('tools');
+  for (const [id, ico, label, key] of TOOLS){
+    const b = document.createElement('button');
+    b.dataset.tool = id; b.style.color = `rgb(${COL[id]})`;
+    b.innerHTML = `<span class="ico">${ico}</span>${label}<span class="k">${key}</span>`;
+    b.onclick = () => setTool(id);
+    toolBox.appendChild(b);
+  }
+  function setTool(t){
+    tool = t;
+    toolBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+    $('toolTip').textContent = TOOLS.find(x => x[0] === t)[4];
+    cv.classList.toggle('grab', t === 'inspect');
+  }
+
+  const pointer = { sx:0, sy:0, in:false, down:false, last:0 };
+  const ptrs = new Map();
+  let panState = null, pinch = null;
+
+  function spawnBurst(w){
+    const n = qty, r = Math.min(brush, 12 + qty * 3);
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * r;
+      Sim.add(tool, w.x + Math.cos(a) * d, w.y + Math.sin(a) * d);
+    }
+    effects.push({ x:w.x, y:w.y, r:3, max:r + 6, c:COL[tool], life:1, k:.05 });
+    collapseAt = 0;
+  }
+  function toolDown(){
+    const w = toWorld(pointer.sx, pointer.sy);
+    if (SPEC[tool]) spawnBurst(w);
+    else if (tool === 'meteor'){
+      const n = Sim.blast(w.x, w.y, brush);
+      effects.push({ x:w.x, y:w.y, r:4, max:brush * 1.25, c:'255,181,71', life:1, k:.015 });
+      effects.push({ x:w.x, y:w.y, r:2, max:brush * .8, c:'255,230,180', life:1, k:.02 });
+      if (n > 10) log(`Un meteorit a șters <b>${n}</b> organisme.`);
+    } else if (tool === 'disease'){
+      const n = Sim.infect(w.x, w.y, brush);
+      effects.push({ x:w.x, y:w.y, r:3, max:brush, c:COL.disease, life:1, k:.025 });
+      if (n) log(`<span style="color:var(--sick)">Ai infectat</span> ${n} creaturi.`);
+    }
+    pointer.last = performance.now();
+  }
+  function holdTool(){
+    if (!pointer.down || panState || pinch) return;
+    const w = toWorld(pointer.sx, pointer.sy), now = performance.now();
+    if (tool === 'plant'){
+      if (now - pointer.last < 40) return; pointer.last = now;
+      for (let i = 0; i < 3 + qty; i++){ const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * brush; Sim.add('plant', w.x + Math.cos(a) * d, w.y + Math.sin(a) * d); }
+    } else if (tool === 'fertile') Sim.paintSoil(w.x, w.y, brush, .05);
+    else if (tool === 'desert') Sim.paintSoil(w.x, w.y, brush, -.05);
+    else if (tool === 'erase') Sim.erase(w.x, w.y, brush);
+    else if (SPEC[tool] && pointer.moved && now - pointer.last > 140){
+      pointer.last = now;
+      Sim.add(tool, w.x + (Math.random() - .5) * 10, w.y + (Math.random() - .5) * 10);
+    }
+  }
+
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    pointer.sx = e.clientX; pointer.sy = e.clientY; pointer.in = true;
+    if (ptrs.size === 2){
+      const [a, b] = [...ptrs.values()];
+      pinch = { d:Math.hypot(a.x - b.x, a.y - b.y), mx:(a.x + b.x) / 2, my:(a.y + b.y) / 2, zoom:cam.zoom,
+                w:toWorld((a.x + b.x) / 2, (a.y + b.y) / 2) };
+      pointer.down = false; panState = null; return;
+    }
+    if (e.button === 1 || e.button === 2 || e.shiftKey || tool === 'inspect'){
+      panState = { sx:e.clientX, sy:e.clientY, cx:cam.x, cy:cam.y, moved:0, click: tool === 'inspect' && e.button === 0 };
+      return;
+    }
+    pointer.down = true; pointer.moved = false;
+    toolDown();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    pointer.sx = e.clientX; pointer.sy = e.clientY; pointer.in = true; pointer.moved = true;
+    if (pinch && ptrs.size === 2){
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      cam.zoom = Math.max(1, Math.min(8, pinch.zoom * d / pinch.d));
+      cam.x = pinch.w.x - mx / scale(); cam.y = pinch.w.y - my / scale();
+      clampCam(); follow = false; return;
+    }
+    if (panState){
+      const dx = e.clientX - panState.sx, dy = e.clientY - panState.sy;
+      panState.moved = Math.max(panState.moved, Math.abs(dx) + Math.abs(dy));
+      if (panState.moved > 4){ cam.x = panState.cx - dx / scale(); cam.y = panState.cy - dy / scale(); clampCam(); follow = false; }
+    }
+  });
+  const up = e => {
+    ptrs.delete(e.pointerId);
+    if (panState && panState.click && panState.moved < 6){
+      const w = toWorld(e.clientX, e.clientY);
+      selected = Sim.pick(w.x, w.y, Math.max(14, 22 / scale()));
+      if (!selected) follow = false;
+      renderInspector();
+    }
+    panState = null; pointer.down = false;
+    if (ptrs.size < 2) pinch = null;
+  };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', () => { pointer.in = false; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive:false });
+  $('zIn').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1.4);
+  $('zOut').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.4);
+  $('zReset').onclick = resetCam;
+
+  // ---------- controale generate ----------
+  const FMT = {
+    pct: v => Math.round(v * 100) + '%', x: v => (+v).toFixed(2) + '×', sec: v => Math.round(v / 60) + ' s',
+    int: v => Math.round(v), f2: v => (+v).toFixed(2)
+  };
+  const getPath = p => p.startsWith('V.') ? V[p.slice(2)] : p.split('.').reduce((o, k) => o[k], P);
+  function setPath(p, v){
+    if (p.startsWith('V.')){ V[p.slice(2)] = v; return; }
+    const ks = p.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], P)[last] = v;
+    rememberParams();
+  }
+  const bound = [];
+  function slider(parent, label, path, min, max, step, fmt, title){
+    const d = document.createElement('div'); d.className = 'ctl';
+    d.innerHTML = `<label${title ? ` title="${title}"` : ''}>${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+    const inp = d.querySelector('input'), out = d.querySelector('output');
+    const show = () => { out.textContent = typeof fmt === 'function' ? fmt(+inp.value) : FMT[fmt](+inp.value); };
+    inp.addEventListener('input', () => { setPath(path, +inp.value); show(); });
+    bound.push(() => { inp.value = getPath(path); show(); });
+    parent.appendChild(d);
+  }
+  function check(parent, label, path){
+    const l = document.createElement('label'); l.className = 'chk';
+    l.innerHTML = `<input type="checkbox"> ${label}`;
+    const inp = l.querySelector('input');
+    inp.addEventListener('change', () => { setPath(path, inp.checked); if (path === 'V.trails') clearAll(); });
+    bound.push(() => { inp.checked = !!getPath(path); });
+    parent.appendChild(l);
+  }
+  function group(parent, title){
+    const g = document.createElement('div'); g.className = 'grp';
+    g.innerHTML = `<div class="lbl">${title}</div>`; parent.appendChild(g); return g;
+  }
+  function syncUI(){ bound.forEach(f => f()); }
+
+  // Lume
+  const W_ = $('secWorld');
+  let g = group(W_, 'Plante');
+  slider(g, 'Fertilitate', 'fertility', .2, 2.5, .05, 'pct', 'Câte plante pot exista și cât de repede apar');
+  slider(g, 'Creștere', 'growth', .3, 3, .05, 'pct', 'Cât de repede se maturizează plantele (o plantă matură hrănește mai mult)');
+  slider(g, 'În pâlcuri', 'plantSpread', 0, 1, .01, 'pct', 'Cât de des apar plantele lângă altele, nu la întâmplare');
+  g = group(W_, 'Anotimpuri');
+  check(g, 'Anotimpuri active (vara crește mult, iarna aproape nimic)', 'seasons');
+  slider(g, 'Intensitate', 'seasonAmp', 0, .85, .01, 'pct');
+  slider(g, 'Durata anului', 'seasonLen', 900, 14400, 300, 'sec');
+  g = group(W_, 'Ciclul nutrienților');
+  slider(g, 'Descompunere', 'decay', .2, 4, .05, 'x', 'Cât de repede putrezesc singure hoiturile');
+  g = group(W_, 'Evoluție & comportament');
+  slider(g, 'Rată mutație', 'mutation', 0, .3, .005, 'pct');
+  slider(g, 'Sprint vânătoare', 'predSprint', 1, 1.8, .05, 'x');
+  check(g, 'Erbivorele formează turme', 'herding');
+  g = group(W_, 'Boli');
+  slider(g, 'Contagiozitate', 'contagion', 0, 1, .01, 'pct');
+  slider(g, 'Durata bolii', 'diseaseLen', 200, 2400, 50, 'sec');
+  slider(g, 'Severitate', 'diseaseDrain', .01, .15, .005, v => Math.round(v / .05 * 100) + '%');
+  check(g, 'Focare spontane de boală', 'spontaneous');
+  g = group(W_, 'Simulare');
+  check(g, 'Repornire automată la colaps', 'V.auto');
+
+  // Specii
+  const SP_ = $('secSpecies');
+  const DESC = {
+    herb: 'Pasc plante, fug de prădători, se adună în turme. Cele rapide scapă mai des, dar ard mai multă energie.',
+    pred: 'Vânează erbivore în sprint. Vânează doar când le e foame; prea mulți prădători golesc lumea.',
+    dec: 'Mănâncă hoituri și eliberează nutrienți în sol — plantele cresc mai bine unde au trecut.'
+  };
+  const CAPR = { herb:[100, 1600, 10], pred:[2, 80, 1], dec:[10, 400, 5] };
+  for (const t of ['herb', 'pred', 'dec']){
+    const box = document.createElement('div'); box.className = 'spec';
+    box.innerHTML = `<h3 class="c-${t}">${t === 'pred' ? '▲' : t === 'dec' ? '◆' : '●'} ${NAMES[t] === 'Erbivor' ? 'Erbivore' : NAMES[t] === 'Prădător' ? 'Prădători' : 'Descompunători'}<button class="reset">implicit</button></h3><p>${DESC[t]}</p>`;
+    box.querySelector('.reset').onclick = () => { P[t] = Sim.copy(Sim.DEFAULTS[t]); rememberParams(); syncUI(); };
+    slider(box, 'Metabolism', t + '.meta', .4, 2.5, .05, 'x', 'Câtă energie consumă pe secundă');
+    slider(box, 'Hrănire', t + '.gain', .4, 2.5, .05, 'x', 'Câtă energie primesc dintr-o masă');
+    slider(box, 'Prag reproducere', t + '.rep', .5, 2, .05, 'x', 'Câtă energie le trebuie ca să facă un pui');
+    slider(box, 'Longevitate', t + '.life', .3, 3, .05, 'x');
+    const [a, b, s] = CAPR[t];
+    slider(box, 'Capacitate', t + '.capK', a, b, s, () => Sim.capOf(t) + ' max', 'Câte pot trăi în lume (raportat la suprafață)');
+    SP_.appendChild(box);
+  }
+
+  // Afișare
+  const VW = $('secView');
+  g = group(VW, 'Efecte');
+  check(g, 'Urme de mișcare', 'V.trails');
+  slider(g, 'Lungime urme', 'V.trailLen', 0, .95, .01, 'pct');
+  check(g, 'Strălucire (la zoom mic)', 'V.glow');
+  check(g, 'Detalii anatomice la zoom ≥ 1.8×', 'V.detail');
+  g = group(VW, 'Straturi de informație');
+  check(g, 'Hartă fertilitate & nutrienți', 'V.heat');
+  check(g, 'Raze de văz', 'V.sense');
+  check(g, 'Linii spre ținte (hrană / pradă / pericol)', 'V.lines');
+  check(g, 'Bare de energie', 'V.energy');
+  check(g, 'Hoituri', 'V.corpses');
+  g = group(VW, 'Legendă');
+  g.insertAdjacentHTML('beforeend', `<div class="legend">
+    <span class="c-plant">❀</span><span>plantă — cele mature (cu floare) hrănesc mai mult</span>
+    <span class="c-herb">●</span><span>erbivor — nuanța arată viteza genetică</span>
+    <span class="c-pred">▲</span><span>prădător — fălcile se deschid la vânătoare</span>
+    <span class="c-dec">◆</span><span>descompunător — tentacule care caută hoituri</span>
+    <span style="color:#968c80">✕</span><span>hoit — se descompune și hrănește solul</span>
+    <span style="color:var(--sick)">◯</span><span>inel verde-gălbui = creatură bolnavă</span></div>`);
+
+  // ---------- butoane & taste ----------
+  function setSpeed(i){ speedIdx = Math.max(0, Math.min(SPEEDS.length - 1, i)); $('speed').value = speedIdx; $('speedV').textContent = SPEEDS[speedIdx] + '×'; }
+  $('speed').addEventListener('input', e => setSpeed(+e.target.value));
+  function togglePause(){ paused = !paused; $('pause').textContent = paused ? '▶ Pornește' : '⏸ Pauză'; }
+  $('pause').onclick = togglePause;
+  $('stepBtn').onclick = () => { if (!paused) togglePause(); doStep(); alpha = 1; updateStats(); updateInspector(); };
+  $('reset').onclick = () => start();
+  $('scenGo').onclick = () => { userP = null; start($('scen').value); };
+  const SCEN = {
+    echilibru: 'Lume uniformă, toate speciile pornesc în proporții echilibrate.',
+    invazie: 'De cinci ori mai mulți prădători. Supraviețuiește ceva?',
+    paradis: 'Sol bogat, multe plante, niciun prădător. Adaugă-i tu când vrei.',
+    oaze: 'Deșert cu câteva oaze fertile. Viața se adună în jurul lor — fragil.',
+    arhipelag: 'Insule fertile despărțite de deșert. Populațiile evoluează separat — fragil.',
+    pustiu: 'Doar plante. Construiește ecosistemul de la zero.'
+  };
+  const showScen = () => $('scenTip').textContent = SCEN[$('scen').value];
+  $('scen').onchange = showScen;
+  $('shot').onclick = () => cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `microcosmos-${S.tick}.png`; a.click(); });
+  const bindPlain = (id, out, fn, fmt) => { const el = $(id); const u = () => { fn(+el.value); $(out).textContent = fmt(+el.value); }; el.addEventListener('input', u); u(); };
+  bindPlain('brush', 'brushV', v => brush = v, v => v + ' px');
+  bindPlain('qty', 'qtyV', v => qty = v, v => v);
+
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-sec]').forEach(s => s.classList.toggle('hidden', s.dataset.sec !== b.dataset.tab));
+    syncUI();
+  });
+  $('mCtrl').onclick = () => { $('ctrl').classList.toggle('mob-hide'); $('stats').classList.add('mob-hide'); };
+  $('mStats').onclick = () => { $('stats').classList.toggle('mob-hide'); $('ctrl').classList.add('mob-hide'); };
+
+  let uiHidden = false;
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT' || (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range')) return;
+    if (e.target.tagName === 'INPUT') e.target.blur();
+    const k = e.key;
+    if (e.code === 'Space'){ e.preventDefault(); togglePause(); }
+    else if (k === '.') $('stepBtn').onclick();
+    else if (k === '+' || k === '=') setSpeed(speedIdx + 1);
+    else if (k === '-' || k === '_') setSpeed(speedIdx - 1);
+    else if (k === 'r' || k === 'R') start();
+    else if (k === 'c' || k === 'C') resetCam();
+    else if (k === 'f' || k === 'F'){ if (selected && !selected.dead){ follow = !follow; if (follow && cam.zoom < 2.5){ cam.zoom = 3; clampCam(); } renderInspector(); } }
+    else if (k === 'Escape'){ selected = null; follow = false; renderInspector(); }
+    else if (k === 'h' || k === 'H'){
+      uiHidden = !uiHidden;
+      for (const id of ['ctrl', 'stats', 'graphBox', 'zoom', 'mbar']) $(id).style.visibility = uiHidden ? 'hidden' : '';
+      $('insp').style.visibility = uiHidden ? 'hidden' : '';
+    }
+    else if (k >= '0' && k <= '9') setTool(TOOLS[+k][0]);
+  });
+  addEventListener('resize', resize);
+
+  // ---------- pornire ----------
+  if (isMobile()){ $('ctrl').classList.add('mob-hide'); $('stats').classList.add('mob-hide'); }
+  setTool('herb'); setSpeed(4); showScen(); buildChips();
+  resize(); start('echilibru'); loop();
+})();
+</script>
+</body>
+</html>
